@@ -6,6 +6,7 @@
 #include <boost/thread.hpp>
 #include <vector>
 #include <boost/filesystem.hpp>
+#include <future>
 
 namespace arduino_bridge
 {
@@ -23,12 +24,19 @@ namespace arduino_bridge
 
             //serial port group
             boost::asio::io_service io_service_;
-            std::vector<boost::asio::serial_port> serial_ports_;
+            
+            //you don't use this variable directly.
+            std::vector<boost::asio::serial_port*> serial_ports_;
+            //mutex for serial port group
+            boost::mutex serial_ports_mutex_;
+
+
             //read and write threads for each serial port.
             boost::thread_group read_write_threads_;
 
             //serial port settings
             int baud_rate_ = 115200;
+
 
 
 
@@ -39,23 +47,62 @@ namespace arduino_bridge
                 arduino_rx_pub_ = nh_.advertise<std_msgs::String>("arduino_rx", 1);
                 baud_rate_ = nh_.param("baud_rate", 115200);
 
+                //find all available serial ports
+                scanPortsAndConnect();
+
+                //shakehand with the arduino
+                for(int i = 0, n = serial_ports_.size(); i < n; i++){
+                    if(serial_ports_[i] != nullptr){
+                        bool can_connect = handShake(*serial_ports_[i]);
+                        //if it can't connect to the arduino, close the port and delete the pointer.
+                        if(!can_connect){
+                            serial_ports_[i]->close();
+                            serial_ports_.erase(serial_ports_.begin() + i);
+                        }
+                    }
+                }
+
             }   
 
         private:
+            //callback function for arduino_tx topic
             void arduinoTxCallback(const std_msgs::String::ConstPtr& msg){
                 
             }
 
+            //add serial port group with mutex
+            inline void addSerialPort(boost::asio::serial_port* serial_port){
+                serial_ports_mutex_.lock();
+                serial_ports_.push_back(serial_port);
+                serial_ports_mutex_.unlock();
+            }
+
+
+
+
+            //handshake with the arduino
             bool handShake(boost::asio::serial_port& serial_port){
-                //try to connect to the port
                 //if connected, send handshake message
                 //if handshake message is received, return true
                 //else return false
+                if(serial_port.is_open()){
+                    boost::asio::write(serial_port, boost::asio::buffer("HelloCRS", 8));
 
-
+                    //wait response and check it
+                    boost::asio::streambuf response;
+                    boost::asio::read_until(serial_port, response, "\n");
+                    if(response.size() > 0){
+                        std::istream response_stream(&response);
+                        std::string response_string;
+                        std::getline(response_stream, response_string);
+                        if(response_string == "HelloCRS"){
+                            return true;
+                        }
+                    }
+                }
 
             };
-            void scanPorts(){
+            void scanPortsAndConnect(){
                 //scan all serianl ports
                 std::vector<std::string> ports;
                 boost::filesystem::directory_iterator itr = boost::filesystem::directory_iterator(boost::filesystem::absolute("/dev"));
@@ -71,7 +118,7 @@ namespace arduino_bridge
                     }
                 }
 
-                //open port, and set serial port options
+                //try to connect to all serial ports
                 for (size_t i = 0; i < ports.size(); i++)
                 {
                     boost::asio::serial_port serial_port(io_service_);
@@ -87,7 +134,8 @@ namespace arduino_bridge
                     serial_port.set_option(boost::asio::serial_port_base::parity(boost::asio::serial_port_base::parity::none));
                     serial_port.set_option(boost::asio::serial_port_base::flow_control(boost::asio::serial_port_base::flow_control::none));
 
-                    serial_ports_.push_back(serial_port);
+                    //add serial port to the group
+                    addSerialPort(&serial_port);
                 }
             };
     };

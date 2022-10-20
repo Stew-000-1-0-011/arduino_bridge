@@ -4,7 +4,6 @@
 #include <std_msgs/String.h>
 #include <boost/asio.hpp>
 #include <boost/thread.hpp>
-#include <vector>
 
 
 namespace slcan_arduino_converter
