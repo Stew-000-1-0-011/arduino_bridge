@@ -10,6 +10,7 @@ project(arduino_bridge)
 find_package(catkin REQUIRED COMPONENTS
   roscpp
   std_msgs
+  nodelet
 )
 
 ## System dependencies are found with CMake's conventions
@@ -119,10 +120,11 @@ include_directories(
   ${catkin_INCLUDE_DIRS}
 )
 
-## Declare a C++ library
-# add_library(${PROJECT_NAME}
-#   src/${PROJECT_NAME}/arduino_bridge.cpp
-# )
+# Declare a C++ library
+add_library(${PROJECT_NAME}
+  src/arduino_bridge.cpp
+  src/slcan_arduino_converter.cpp
+)
 
 ## Add cmake target dependencies of the library
 ## as an example, code may need to be generated before libraries
