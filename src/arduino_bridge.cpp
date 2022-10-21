@@ -47,9 +47,6 @@ namespace arduino_bridge
                 arduino_rx_pub_ = nh_.advertise<std_msgs::String/*TODO*/>("arduino_rx", 1);
                 baud_rate_ = nh_.param("baud_rate", 115200);
 
-<<<<<<< HEAD
-
-=======
                 //find all available serial ports
                 scanPortsAndConnect();
 
@@ -66,7 +63,6 @@ namespace arduino_bridge
                 }
 
             }   
->>>>>>> b2cbedaa894c2f62021014f1f69883bd6938980f
 
         private:
             //callback function for arduino_tx topic
@@ -105,14 +101,9 @@ namespace arduino_bridge
                     }
                 }
 
-<<<<<<< HEAD
-            };
+            }
 
-            void scanPorts(){
-=======
-            };
             void scanPortsAndConnect(){
->>>>>>> b2cbedaa894c2f62021014f1f69883bd6938980f
                 //scan all serianl ports
                 std::vector<std::string> ports;
                 boost::filesystem::directory_iterator itr = boost::filesystem::directory_iterator(boost::filesystem::absolute("/dev"));
