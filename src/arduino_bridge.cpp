@@ -1,5 +1,5 @@
 #include <ros/ros.h>
-#include<nodelet/nodelet.h>
+#include <nodelet/nodelet.h>
 #include <pluginlib/class_list_macros.hpp>
 #include <std_msgs/String.h>
 #include <boost/asio.hpp>
@@ -36,10 +36,10 @@ namespace arduino_bridge
             void onInit() override{
                 nh_ = getNodeHandle();
                 arduino_tx_sub_ = nh_.subscribe("arduino_tx", 1, &ArduinoBridge::arduinoTxCallback, this);
-                arduino_rx_pub_ = nh_.advertise<std_msgs::String>("arduino_rx", 1);
+                arduino_rx_pub_ = nh_.advertise<std_msgs::String/*TODO*/>("arduino_rx", 1);
                 baud_rate_ = nh_.param("baud_rate", 115200);
 
-            }   
+            }
 
         private:
             void arduinoTxCallback(const std_msgs::String::ConstPtr& msg){
@@ -54,7 +54,8 @@ namespace arduino_bridge
 
 
 
-            };
+            }
+
             void scanPorts(){
                 //scan all serianl ports
                 std::vector<std::string> ports;
