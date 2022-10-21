@@ -10,10 +10,10 @@
 
     <!-- Arduino -->
     <node pkg="nodelet" type="nodelet" name="arduino_bridge"
-    args="$(arg nodelet_mode) can_plugins/ArduinoBridge $(arg manager_name)" output="screen"/>
+    args="$(arg nodelet_mode) arduino_bridge/ArduinoBridge $(arg manager_name)" output="screen"/>
 
     <!-- SLCAN to Arduino Converter -->
     <node pkg="nodelet" type="nodelet" name="slcan_arduino_converter"
-    args="$(arg nodelet_mode) can_plugins/SlcanArduinoConverter $(arg manager_name)" output="screen"/>
+    args="$(arg nodelet_mode) arduino_bridge/SlcanArduinoConverter $(arg manager_name)" output="screen"/>
 
 </launch>
