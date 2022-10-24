@@ -1,12 +1,12 @@
+#include <vector>
+
 #include <ros/ros.h>
-#include<nodelet/nodelet.h>
+
+#include <nodelet/nodelet.h>
 #include <pluginlib/class_list_macros.hpp>
-#include <std_msgs/String.h>
+
 #include <boost/asio.hpp>
 #include <boost/thread.hpp>
-#include <vector>
-#include <boost/filesystem.hpp>
-#include <future>
 
 namespace arduino_bridge
 {
@@ -23,13 +23,14 @@ namespace arduino_bridge
             ros::Publisher arduino_rx_pub_;
 
             //serial port group
-            boost::asio::io_service io_service_;
+            boost::asio::io_context io_context_;
             
             //you don't use this variable directly.
-            std::vector<boost::asio::serial_port*> serial_ports_;
-            //mutex for serial port group
-            boost::mutex serial_ports_mutex_;
-
+            std::vector<boost::asio::serial_port> serial_ports_;
+            
+            // not use. ArduinoBridge does nothing when USB devices connects to PC.
+            // //mutex for serial port group
+            // boost::mutex serial_ports_mutex_;
 
             //read and write threads for each serial port.
             boost::thread_group read_write_threads_;
@@ -37,32 +38,31 @@ namespace arduino_bridge
             //serial port settings
             int baud_rate_ = 115200;
 
-
-
-
         public:
             void onInit() override{
                 nh_ = getNodeHandle();
-                arduino_tx_sub_ = nh_.subscribe("arduino_tx", 1, &ArduinoBridge::arduinoTxCallback, this);
-                arduino_rx_pub_ = nh_.advertise<std_msgs::String>("arduino_rx", 1);
+                arduino_tx_sub_ = nh_.subscribe<arduino_bridge::Frame>("arduino_tx", 100, &ArduinoBridge::arduinoTxCallback, this);
+                arduino_rx_pub_ = nh_.advertise<arduino_bridge::Frame>("arduino_rx", 100);
                 baud_rate_ = nh_.param("baud_rate", 115200);
 
                 //find all available serial ports
                 scanPortsAndConnect();
 
                 //shakehand with the arduino
-                for(int i = 0, n = serial_ports_.size(); i < n; i++){
-                    if(serial_ports_[i] != nullptr){
-                        bool can_connect = handShake(*serial_ports_[i]);
-                        //if it can't connect to the arduino, close the port and delete the pointer.
-                        if(!can_connect){
-                            serial_ports_[i]->close();
-                            serial_ports_.erase(serial_ports_.begin() + i);
-                        }
+                size_t i = 0;
+                for(const auto& port : serial_ports_){
+
+                    bool can_connect = handShake(port);
+                    //if it can't connect to the arduino, close the port and delete the pointer.
+                    if(!can_connect){
+                        port->close();
+                        serial_ports_.erase(serial_ports_.begin() + i);
                     }
+
+                    ++i;
                 }
 
-            }   
+            }
 
         private:
             //callback function for arduino_tx topic
@@ -76,9 +76,6 @@ namespace arduino_bridge
                 serial_ports_.push_back(serial_port);
                 serial_ports_mutex_.unlock();
             }
-
-
-
 
             //handshake with the arduino
             bool handShake(boost::asio::serial_port& serial_port){
@@ -101,7 +98,8 @@ namespace arduino_bridge
                     }
                 }
 
-            };
+            }
+
             void scanPortsAndConnect(){
                 //scan all serianl ports
                 std::vector<std::string> ports;
@@ -109,10 +107,10 @@ namespace arduino_bridge
                 for(; itr != boost::filesystem::directory_iterator(); ++itr)
                 {
                     if(boost::filesystem::is_symlink(itr->status())){
-            
-                    }     
+
+                    }
                     else if(boost::filesystem::is_regular_file(itr->status())){
-                        if(itr->path().filename().string().substr(0,3) == "tty"||itr->path().extension() == ""){
+                        if(itr->path().filename().string().substr(0,3) == "tty" || itr->path().extension() == ""){
                             ports.push_back(itr->path().string());
                         }
                     }
@@ -127,17 +125,18 @@ namespace arduino_bridge
                     if(serial_port.is_open()){
                         break;
                     }
+
                     //set options
-                    serial_port.set_option(boost::asio::serial_port_base::baud_rate(baud_rate_));
-                    serial_port.set_option(boost::asio::serial_port_base::character_size(8));
-                    serial_port.set_option(boost::asio::serial_port_base::stop_bits(boost::asio::serial_port_base::stop_bits::one));
-                    serial_port.set_option(boost::asio::serial_port_base::parity(boost::asio::serial_port_base::parity::none));
-                    serial_port.set_option(boost::asio::serial_port_base::flow_control(boost::asio::serial_port_base::flow_control::none));
+                    // serial_port.set_option(boost::asio::serial_port_base::baud_rate(baud_rate_));
+                    // serial_port.set_option(boost::asio::serial_port_base::character_size(8));
+                    // serial_port.set_option(boost::asio::serial_port_base::stop_bits(boost::asio::serial_port_base::stop_bits::one));
+                    // serial_port.set_option(boost::asio::serial_port_base::parity(boost::asio::serial_port_base::parity::none));
+                    // serial_port.set_option(boost::asio::serial_port_base::flow_control(boost::asio::serial_port_base::flow_control::none));
 
                     //add serial port to the group
                     addSerialPort(&serial_port);
                 }
-            };
+            }
     };
 
 } // namespace arduino_bridge
