@@ -1,8 +1,10 @@
 cmake_minimum_required(VERSION 3.0.2)
 project(arduino_bridge)
 
-## Compile as C++11, supported in ROS Kinetic and newer
-# add_compile_options(-std=c++11)
+# Compile as C++11, supported in ROS Kinetic and newer
+add_compile_options(-std=c++14)
+#Compile pthread for multithreading
+add_compile_options(-pthread)
 
 ## Find catkin macros and libraries
 ## if COMPONENTS list like find_package(catkin REQUIRED COMPONENTS xyz)
@@ -11,6 +13,7 @@ find_package(catkin REQUIRED COMPONENTS
   roscpp
   std_msgs
   nodelet
+  message_generation
 )
 
 ## System dependencies are found with CMake's conventions
@@ -46,12 +49,11 @@ find_package(catkin REQUIRED COMPONENTS
 ##   * uncomment the generate_messages entry below
 ##   * add every package in MSG_DEP_SET to generate_messages(DEPENDENCIES ...)
 
-## Generate messages in the 'msg' folder
-# add_message_files(
-#   FILES
-#   Message1.msg
-#   Message2.msg
-# )
+# Generate messages in the 'msg' folder
+add_message_files(
+  FILES
+  Frame.msg
+)
 
 ## Generate services in the 'srv' folder
 # add_service_files(
