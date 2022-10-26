@@ -33,15 +33,6 @@ namespace arduino_bridge
 			TopicId id;
 			u8 size;
 			std::vector<asio::serial_port *> ports;
-			boost::shared_mutex mutex{};
-
-			TopicData(const TopicData& obj) noexcept
-			{
-				boost::lock_guard lock{obj.mutex};
-				id = obj.id;
-				size = obj.size;
-				ports = obj.ports;
-			}
 		};
 
 		std::unordered_map<std::string, TopicData> name_to_data{};
@@ -49,7 +40,7 @@ namespace arduino_bridge
 		boost::shared_mutex mutex{};
 
 	public:
-		TopicManager() = default;
+		Manager() = default;
 		TopicManager(const TopicManager&) = delete;
 		TopicManager& operator=(const TopicManager&) = delete;
 		TopicManager(TopicManager&) = delete;
