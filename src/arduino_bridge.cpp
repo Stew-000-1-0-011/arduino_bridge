@@ -17,8 +17,8 @@ namespace arduino_bridge
 {
     class ArduinoSerial{
         public:
-            std::shared_ptr<boost::asio::io_context> io_context_;
-            std::shared_ptr<boost::asio::serial_port> port_;
+            std::unique_ptr<boost::asio::io_context> io_context_;
+            std::unique_ptr<boost::asio::serial_port> port_;
             std::vector<uint8_t> topic_id_;
             bool is_active_ =false;
             ArduinoSerial():port_(new boost::asio::serial_port(io_context_)){}; 
@@ -110,11 +110,37 @@ namespace arduino_bridge
             }
 
             void comunicateSerialPort(arduino_bridge::ArduinoSerial arduino_serial){
-
+                while(ros::ok()){
+                    //read data untill /n from serial port.
+                    std::string read_data;
+                    boost::asio::read_until(arduino_serial.port_, data, "\n");
+                    //check the topic id.
+                    for(const auto& topic_id : arduino_serial.topic_id_){
+                        if(read_data[0] == topic_id){
+                            //if the topic id is matched, push the data to working_queue_.
+                            arduino_bridge::Frame frame;
+                            frame.topic_id = topic_id;
+                            //data are read_data without first byte.
+                            frame.data = read_data.substr(1);
+                            working_queue_.push(frame);
+                        }
+                    }
+                    
+                }
             }
 
             //callback function for arduino_tx topic
-            void arduinoTxCallback(const std_msgs::String::ConstPtr& msg){
+            void arduinoTxCallback(const arduino_bridge::Frame::ConstPtr& msg){
+                //TODO : write data to serial port.
+                //search the topic id in arduino_serials_.
+                for(const auto& arduino_serial : arduino_serials_){
+                    for(const auto& topic_id : arduino_serial.topic_id_){
+                        if(msg->data[0] == topic_id){
+                            //if the topic id is matched, write the data to serial port.
+                            boost::asio::async_write(arduino_serial.port_, msg->data, boost::bind(&ArduinoBridge::writeHandler, this, boost::asio::placeholders::error, boost::asio::placeholders::bytes_transferred));
+                        }
+                    }
+                }
                 
             }
 
@@ -131,7 +157,7 @@ namespace arduino_bridge
                 //if handshake message is received, return true
                 //else return false
                 if(arduino_serial->port_->is_open()){
-                    boost::asio::write(arduino_serial->port_, boost::asio::buffer("HelloCRS", 8));
+                    boost::asio::write(arduino_serial->port_, boost::asio::buffer("HelloCRS\n", 8));
 
                     //wait response and check it
                     boost::asio::streambuf response;
