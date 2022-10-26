@@ -171,7 +171,6 @@ namespace arduino_bridge
                         }
                     }
                 }
-
             }
 
             void scanPortsAndConnect(){
