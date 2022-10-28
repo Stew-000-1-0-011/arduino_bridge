@@ -8,33 +8,12 @@
 #include <boost/json/string_view.hpp>
 #include <boost/asio.hpp>
 
-#include <CRSLib/include/std_int.hpp>
-#include <CRSLib/include/utility.hpp>
+#include "utility.hpp"
 
 namespace arduino_bridge
 {
-	using namespace CRSLib::IntegerTypes;
-	namespace asio = boost::asio;
-
-	enum class TopicId : u8
-	{
-		advertise = 0x0,
-		subscribe = 0x1,
-		emergency = 0x2,
-		normal_id_start,
-		normal_id_end = 0xFE,
-		null = 0xFF
-	};
-
 	class TopicManager final
 	{
-		struct TopicData
-		{
-			TopicId id;
-			u8 size;
-			std::vector<asio::serial_port *> ports;
-		};
-
 		std::unordered_map<std::string, TopicData> name_to_data{};
 		std::map<TopicId, std::string>  id_to_name{};
 		boost::shared_mutex mutex{};
@@ -48,7 +27,7 @@ namespace arduino_bridge
 
 		// 本来は例外を使うべきなのかもしれないが、tryされなそうなのでやめた。
 		// registerが予約語なので...
-		bool regist(const boost::string_view topic_name, const u8 size, asio::serial_port *const port) noexcept
+		bool regist(const boost::string_view topic_name, const u8 size) noexcept
 		{
 			{
 				boost::lock_guard lock{mutex};
@@ -56,27 +35,27 @@ namespace arduino_bridge
 				const auto iter = name_to_data.find(topic_name);
 				if(iter != name_to_data.end())
 				{
-					if(iter->second.size != size)
-					{
-						return false;
-					}
-					else
-					{
-						iter->second.ports.push_back(port);
-					}
+					if(iter->second.size != size) return false;
+					else return true;
 				}
 				else
 				{
 					TopicId untied_id = get_untied_id_nonlock();
-					if(untied_id == TopicId::null) return false;
-					name_to_data[topic_name] = {untied_id, size, {port}};
+					if(untied_id == TopicId::null)
+					{
+						return false;
+					}
+					else
+					{
+						name_to_data[topic_name] = {untied_id, size};
+						id_to_name[untied_id] = topic_name;
+						return true;
+					}
 				}
 			}
-
-			return true;
 		}
 
-		bool unregist(const boost::string_view topic_name, asio::serial_port *const port) noexcept
+		bool unregist(const boost::string_view topic_name) noexcept
 		{
 			{
 				boost::lock_guard lock{mutex};
@@ -84,37 +63,23 @@ namespace arduino_bridge
 				const auto iter = name_to_data.find(topic_name);
 				if(iter != name_to_data.end())
 				{
-					if(iter->second.size != size)
-					{
-						return false;
-					}
-					else
-					{
-						for(auto port_iter = iter->second.ports.begin(), port_iter != iter->second.ports.end(); ++port_iter)
-						{
-							if(*port_iter == port)
-							{
-								iter->second.ports.erase(port_iter);
-								break;
-							}
-						}
-					}
+					name_to_data.erase(iter);
+					return true;
 				}
+				else return false;
 			}
-			
-			return false;
 		}
 
 		std::string get_topic_name(const TopicId id)
 		{
 			boost::shared_lock lock{mutex};
-			return id_to_name[id];
+			return id_to_name.at(id);
 		}
 
-		TopicData get_topic_data(boost::string_view name)
+		TopicData get_topic_data(boost::string_view topic_name)
 		{
 			boost::shared_lock lock{mutex};
-			return name_to_data[name];
+			return name_to_data.at(topic_name);
 		}
 
 

@@ -9,37 +9,12 @@
 #include <boost/asio.hpp>
 #include <boost/thread.hpp>
 #include <boost/filesystem.hpp>
-#include <boost/lockfree/queue.hpp>
 
 #include <arduino_bridge/Frame.h>
 
 
 namespace arduino_bridge
 {
-    class ArduinoSerial{
-        public:
-            static constexpr unsigned int baud_rate_ = 115200;
-
-            boost::asio::io_context io_context_{};
-            boost::asio::executor_work_guard work_guard{io_context_};
-            boost::asio::
-
-            boost::asio::serial_port port_{io_context_};
-            std::vector<uint8_t> topic_id_{};
-            
-            
-            ArduinoSerial(const boost::string_view port_filepath)
-            {
-                port_->open(port_filepath);
-                port_->set_option(boost::asio::serial_port_base::baud_rate(baud_rate_));
-            }
-
-            ~ArduinoSerial()
-            {
-                port_->close();
-            }
-    };
-
     //This class is used usb-serial communication with arduinos.
     //First, it tries to find the arduino by all available ports.
     //If it finds the arduino, it tries to connect to it.
@@ -136,7 +111,6 @@ namespace arduino_bridge
                         working_queue_.push(frame);
                     }
                 }
-                
             }
         }
 

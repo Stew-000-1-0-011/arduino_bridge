@@ -1,3 +1,3 @@
 Header header
-uint8 id
+string topic_name
 uint8[] data
