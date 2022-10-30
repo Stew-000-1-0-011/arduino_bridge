@@ -3,6 +3,7 @@
 #include <string>
 #include <map>
 #include <unordered_map>
+#include <utility>
 
 #include <boost/thread/shared_mutex.hpp>
 #include <boost/asio.hpp>
@@ -13,8 +14,8 @@ namespace arduino_bridge
 {
 	class TopicManager final
 	{
-		std::unordered_map<std::string, TopicData> name_to_data{};
-		std::map<TopicId::type, std::string> id_to_name{};
+		std::unordered_map<std::string, TopicData> name_to_data{std::make_pair(std::string{"Emergency"}, TopicData{TopicId::emergency, 0}), std::make_pair(std::string{"Null"}, TopicData{TopicId::null, 0})};
+		std::map<TopicId::type, std::string> id_to_name{std::make_pair(TopicId::emergency, std::string{"Emergency"}), std::make_pair(TopicId::null, std::string{"Null"})};
 		mutable boost::shared_mutex mutex{};
 
 	public:

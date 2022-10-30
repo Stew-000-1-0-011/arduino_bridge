@@ -53,31 +53,53 @@ namespace arduino_bridge
 				{
 					const auto arduino_listen = [this, &arduino]()
 					{
-						while(!arduino.requested_stop)
+						while(!arduino.shutdown)
 						{
-							std::vector<u8> frame(1);
-
-							// get topic_id
-							boost::system::error_code ec{};
-							arduino.serial.read_byte(frame.data(), 1, ec);
-							if(ec)
+							while(!arduino.requested_stop)
 							{
-								arduino.requested_stop = true;
-								return;
+								std::vector<u8> frame(1);
+
+								// get topic_id
+								boost::system::error_code ec{};
+								arduino.serial.read_byte(frame.data(), 1, ec);
+								if(ec)
+								{
+									arduino.requested_stop = true;
+									return;
+								}
+
+								if(frame[0] == TopicId::bridge_command)
+								{
+									bridgeCommandReceive(arduino);
+								}
+								else
+								{
+									normalIdAndEmergencyReceive(arduino, frame);
+								}
 							}
 
-							if(frame[0] == TopicId::bridge_command)
+							// notify reading has been stopped.
+							arduino.reading_has_stopped = true;
+
+							// wait arduino all stop.
+							while(true)
 							{
-								bridgeCommandReceive(arduino);
+								if(ardino.has_stopped()) break;
 							}
-							else
+
+							// handshake and reboot.
+							while(!arduino.shutdown)
 							{
-								normalIdAndEmergencyReceive(arduino, frame);
+								if(arduino.handshake())
+								{
+									arduino.reboot();
+									break;
+								}
 							}
 						}
 
-						// notify reading has been stoped.
-						arduino.reading_has_stoped = true;
+						// if shutdowned while rebooting, reading_has_stopped is false. So change this.
+						arduino.reading_has_stopped = true;
 					};
 
 					// run.
@@ -101,7 +123,7 @@ namespace arduino_bridge
 				const auto&& lock = boost::shared_lock<decltype(arduino_padawans_mutex)>(arduino_padawans_mutex);
 				for(const auto& arduino : arduino_padawans)
 				{
-					while(!arduino.has_stoped());
+					while(!arduino.has_stopped());
 				}
 			}
 		}
