@@ -4,9 +4,9 @@
       The ArdunioBridge class is a nodelet that provides an interface to an Arduino.
     </description>
   </class>
-  <class name="arduino_bridge/SlcanArduinoConverter" type="slcan_arduino_converter::SlcanArduinoConverter" base_class_type="nodelet::Nodelet">
+  <!-- <class name="arduino_bridge/SlcanArduinoConverter" type="slcan_arduino_converter::SlcanArduinoConverter" base_class_type="nodelet::Nodelet">
     <description>
       The SlcanArduinoConverter class is a nodelet that converts SLCAN messages to Arduino messages.
     </description>
-  </class>
+  </class> -->
 </library>

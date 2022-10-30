@@ -1,10 +1,8 @@
 cmake_minimum_required(VERSION 3.0.2)
 project(arduino_bridge)
 
-# Compile as C++11, supported in ROS Kinetic and newer
-add_compile_options(-std=c++14)
-#Compile pthread for multithreading
-add_compile_options(-pthread)
+## Compile as C++11, supported in ROS Kinetic and newer
+add_compile_options(-std=c++14 -g -O2 -Wall -Wextra -pedantic-errors -fmax-errors=10)
 
 ## Find catkin macros and libraries
 ## if COMPONENTS list like find_package(catkin REQUIRED COMPONENTS xyz)
@@ -12,12 +10,12 @@ add_compile_options(-pthread)
 find_package(catkin REQUIRED COMPONENTS
   roscpp
   std_msgs
-  nodelet
   message_generation
 )
 
+# しかしasioはない。はあ？
 ## System dependencies are found with CMake's conventions
-# find_package(Boost REQUIRED COMPONENTS system)
+find_package(Boost REQUIRED COMPONENTS system thread)
 
 
 ## Uncomment this if the package has a setup.py. This macro ensures
@@ -72,7 +70,7 @@ add_message_files(
 # Generate added messages and services with any dependencies listed here
 generate_messages(
   DEPENDENCIES
-  std_msgs
+  std_msgs  # Or other packages containing msgs
 )
 
 ################################################
@@ -105,9 +103,9 @@ generate_messages(
 ## CATKIN_DEPENDS: catkin_packages dependent projects also need
 ## DEPENDS: system dependencies of this project that dependent projects also need
 catkin_package(
-#  INCLUDE_DIRS include
+ INCLUDE_DIRS include
 #  LIBRARIES arduino_bridge
-#  CATKIN_DEPENDS roscpp std_msgs
+ CATKIN_DEPENDS roscpp std_msgs
 #  DEPENDS system_lib
 )
 
@@ -118,15 +116,14 @@ catkin_package(
 ## Specify additional locations of header files
 ## Your package locations should be listed before other locations
 include_directories(
-# include
-  ${catkin_INCLUDE_DIRS}
+include
+${catkin_INCLUDE_DIRS}
 )
 
-# Declare a C++ library
-add_library(${PROJECT_NAME}
-  src/arduino_bridge.cpp
-  src/slcan_arduino_converter.cpp
-)
+## Declare a C++ library
+# add_library(${PROJECT_NAME}
+#   src/${PROJECT_NAME}/arduino_bridge.cpp
+# )
 
 ## Add cmake target dependencies of the library
 ## as an example, code may need to be generated before libraries
@@ -153,6 +150,13 @@ add_library(${PROJECT_NAME}
 #   ${catkin_LIBRARIES}
 # )
 
+add_library(${PROJECT_NAME}
+  src/arduino_bridge.cpp
+)
+
+target_link_libraries(${PROJECT_NAME}
+  ${catkin_LIBRARIES}
+)
 #############
 ## Install ##
 #############
