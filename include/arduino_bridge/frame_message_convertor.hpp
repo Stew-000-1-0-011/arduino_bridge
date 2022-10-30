@@ -13,9 +13,9 @@ namespace arduino_bridge
 	{
 		Frame message{};
 
-		message.topic_name = TopicManager::get_instance().get_topic_name(static_cast<TopicId>(frame[0]));
-		message.data.reserve(frame.size() - 1);
-		std::memcpy(message.data.data(), frame.data.data() + 1, message.data.size());
+		message.topic_name = TopicManager::get_instance().get_topic_name(static_cast<TopicId::type>(frame[0]));
+		message.data.resize(frame.size() - 1);
+		std::memcpy(message.data.data(), frame.data() + 1, message.data.size());
 
 		return message;
 	}
@@ -24,8 +24,8 @@ namespace arduino_bridge
 	{
 		std::vector<u8> frame(1 + message.data.size());
 
-		frame[0] = TopicManager::get_instance().get_topic_data(message.topic_name);
-		std::memcpy(frame.data.data() + 1, message.data.data(), message.data.size());
+		frame[0] = TopicManager::get_instance().get_topic_data(message.topic_name).id;
+		std::memcpy(frame.data() + 1, message.data.data(), message.data.size());
 
 		return frame;
 	}

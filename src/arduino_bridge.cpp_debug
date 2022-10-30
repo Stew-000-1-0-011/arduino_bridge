@@ -1,0 +1,5 @@
+#include <arduino_bridge/utility.hpp>
+static_assert(BOOST_VERSION != 107100, "");
+
+int main()
+{}

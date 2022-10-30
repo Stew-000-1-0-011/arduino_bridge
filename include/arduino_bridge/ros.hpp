@@ -13,7 +13,7 @@ namespace arduino_bridge
 	{
 		ros::Publisher * arduino_rx_pub;
 		
-
+	public:
 		Ros(ros::Publisher *const arduino_rx_pub) noexcept:
 			arduino_rx_pub{arduino_rx_pub}
 		{}

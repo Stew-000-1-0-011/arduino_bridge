@@ -7,14 +7,14 @@ namespace arduino_bridge
 {
 	class ArduinoSerial final : public Serial
 	{
-		std::vector<TopicId> topic_ids_{};
+		std::vector<TopicId::type> topic_ids_{};
 
-		using Serial::Serial(const boost::string_view);
+		using Serial::Serial(const std::string&);
 
 	public:
 		using Serial::Serial(Serial&&);
 	
-		[[nodiscard]] static std::future<std::optional<ArduinoSerial>> make(const boost::string_view port_filepath) noexcept
+		[[nodiscard]] static std::future<std::optional<ArduinoSerial>> make(const std::string& port_filepath) noexcept
 		{
 			constexpr auto make_if_can_handshake = [port_filepath]() noexcept
 			{
@@ -41,7 +41,7 @@ namespace arduino_bridge
 		{
 			const DynamicSerialData poo_poo_cushion =
 			 {
-				CRSLib::to_underlying(TopicId::bridge_command),
+				TopicId::bridge_command,
 				CRSLib::to_underlying(BridgeCommand::handshake),
 				'H', 'e', 'l', 'l', 'o', 'C', 'R', 'S'
 			 };

@@ -6,10 +6,7 @@
 #include <future>
 #include <algorithm>
 
-#include <boost/utility/string_view.hpp>
 #include <boost/asio.hpp>
-
-#include <CRSLib/include/utility.hpp>
 
 #include "utility.hpp"
 
@@ -34,7 +31,7 @@ namespace arduino_bridge
         asio::serial_port port_{io_context_};
 
     public:
-        ArduinoSerial(const boost::string_view port_filepath) noexcept{
+        ArduinoSerial(const std::string& port_filepath) noexcept{
             // set baudrate.
             port_->set_option(asio::serial_port_base::baud_rate(baud_rate_));
             // open.
@@ -92,10 +89,10 @@ namespace arduino_bridge
             else return true;
         }
 
-        [[nodiscard]] friend std::future<std::optional<ArduinoSerial>> make_arduino_serial(const boost::string_view port_filepath) noexcept;
+        [[nodiscard]] friend std::future<std::optional<ArduinoSerial>> make_arduino_serial(const std::string& port_filepath) noexcept;
     };
 
-    [[nodiscard]] friend std::future<std::optional<ArduinoSerial>> make_arduino_serial(const boost::string_view port_filepath) noexcept
+    [[nodiscard]] friend std::future<std::optional<ArduinoSerial>> make_arduino_serial(const std::string& port_filepath) noexcept
     {
         constexpr auto make_if_can_handshake = [port_filepath]() noexcept
         {

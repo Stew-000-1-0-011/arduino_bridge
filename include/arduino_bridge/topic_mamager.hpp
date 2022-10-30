@@ -5,7 +5,6 @@
 #include <unordered_map>
 
 #include <boost/thread/shared_mutex.hpp>
-#include <boost/json/string_view.hpp>
 #include <boost/asio.hpp>
 
 #include "utility.hpp"
@@ -15,8 +14,8 @@ namespace arduino_bridge
 	class TopicManager final
 	{
 		std::unordered_map<std::string, TopicData> name_to_data{};
-		std::map<TopicId, std::string> id_to_name{};
-		boost::shared_mutex mutex{};
+		std::map<TopicId::type, std::string> id_to_name{};
+		mutable boost::shared_mutex mutex{};
 
 	public:
 		TopicManager() = default;
@@ -27,10 +26,10 @@ namespace arduino_bridge
 
 		// 本来は例外を使うべきなのかもしれないが、tryされなそうなのでやめた。
 		// registerが予約語なので...
-		bool regist(const boost::string_view topic_name, const u8 size) noexcept
+		bool regist(const std::string& topic_name, const u8 size) noexcept
 		{
 			{
-				boost::lock_guard lock{mutex};
+				const auto&& lock = boost::make_lock_guard(mutex);
 
 				const auto iter = name_to_data.find(topic_name);
 				if(iter != name_to_data.end())
@@ -40,7 +39,7 @@ namespace arduino_bridge
 				}
 				else
 				{
-					TopicId untied_id = get_untied_id_nonlock();
+					TopicId::type untied_id = get_untied_id_nonlock();
 					if(untied_id == TopicId::null)
 					{
 						return false;
@@ -55,10 +54,10 @@ namespace arduino_bridge
 			}
 		}
 
-		bool unregist(const boost::string_view topic_name) noexcept
+		bool unregist(const std::string& topic_name) noexcept
 		{
 			{
-				boost::lock_guard lock{mutex};
+				const auto&& lock = boost::make_lock_guard(mutex);
 
 				const auto iter = name_to_data.find(topic_name);
 				if(iter != name_to_data.end())
@@ -70,15 +69,21 @@ namespace arduino_bridge
 			}
 		}
 
-		boost::string_view get_topic_name(const TopicId id)
+		std::string& get_topic_name(const TopicId::type id) noexcept
 		{
-			boost::shared_lock_guard lock{mutex};
+			const auto&& lock = boost::shared_lock<decltype(mutex)>(mutex);
 			return id_to_name.at(id);
 		}
 
-		TopicData get_topic_data(boost::string_view topic_name)
+		u8 get_topic_size(const TopicId::type id)
 		{
-			boost::shared_lock_guard lock{mutex};
+			const auto&& lock = boost::shared_lock<decltype(mutex)>(mutex);
+			return name_to_data.at(id_to_name.at(id)).size;
+		}
+
+		TopicData get_topic_data(const std::string& topic_name)
+		{
+			const auto&& lock = boost::shared_lock<decltype(mutex)>(mutex);
 			return name_to_data.at(topic_name);
 		}
 
@@ -90,13 +95,13 @@ namespace arduino_bridge
 
 
 	private:
-		TopicId get_untied_id() const noexcept
+		TopicId::type get_untied_id() const noexcept
 		{
-			boost::shared_lock_guard lock{mutex};
+			const auto&& lock = boost::shared_lock<decltype(mutex)>(mutex);
 			return get_untied_id_nonlock();
 		}
 
-		TopicId get_untied_id_nonlock() const noexcept
+		TopicId::type get_untied_id_nonlock() const noexcept
 		{
 			if(id_to_name.empty())
 			{
@@ -104,16 +109,17 @@ namespace arduino_bridge
 			}
 
 			auto iter_prev = id_to_name.cbegin();
-
-			for(auto iter_next = id_to_name.cbegin() + 1; iter_next != id_to_name.cend(); ++iter_prev, ++iter_next)
+			auto iter_next = id_to_name.cbegin();
+			++iter_next;
+			for(; iter_next != id_to_name.cend(); ++iter_prev, ++iter_next)
 			{
-				if(iter_prev->first + 1 < iter_next->first && CRSLib::to_underlying(iter_prev->first) + 1 != CRSLib::to_underlying(TopicId::null))
+				if(iter_prev->first + 1 < iter_next->first && iter_prev->first + 1 != TopicId::null)
 				{
-					return static_cast<TopicId>(iter_prev->first + 1);
+					return static_cast<TopicId::type>(iter_prev->first + 1);
 				}
 			}
 
-			return static_cast<TopicId>(iter_prev->first + 1);
+			return static_cast<TopicId::type>(iter_prev->first + 1);
 		}
 	};
 }

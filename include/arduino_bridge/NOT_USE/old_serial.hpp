@@ -7,11 +7,8 @@
 #include <future>
 #include <algorithm>
 
-#include <boost/utility/string_view.hpp>
 #include <boost/asio.hpp>
 #include <boost/system/error_code.hpp>
-
-#include <CRSLib/include/utility.hpp>
 
 #include "utility.hpp"
 
@@ -40,7 +37,7 @@ namespace arduino_bridge
 		asio::serial_port port_{io_context_};
 
 	public:
-		Serial(const boost::string_view port_filepath) noexcept
+		Serial(const std::string& port_filepath) noexcept
 		{
 			// set baudrate.
 			port_->set_option(asio::serial_port_base::baud_rate(baud_rate_));
