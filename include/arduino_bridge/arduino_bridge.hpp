@@ -88,11 +88,21 @@ namespace arduino_bridge
 
 		~ArduinoBridge()
 		{
-			/// TODO: これほんとにデッドロックしないんか...？
-			const auto&& lock = boost::shared_lock<decltype(arduino_padawans_mutex)>(arduino_padawans_mutex);
-			for(const auto& arduino : arduino_padawans)
 			{
-				while(!arduino.has_stoped());
+				const auto&& lock = boost::make_lock_guard(arduino_padawans_mutex);
+				for(auto& arduino : arduino_padawans)
+				{
+					arduino.requested_stop = true;
+				}
+			}
+
+			/// TODO: これほんとにデッドロックしないんか...？
+			{
+				const auto&& lock = boost::shared_lock<decltype(arduino_padawans_mutex)>(arduino_padawans_mutex);
+				for(const auto& arduino : arduino_padawans)
+				{
+					while(!arduino.has_stoped());
+				}
 			}
 		}
 
