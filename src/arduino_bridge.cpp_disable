@@ -1,0 +1,207 @@
+#include <vector>
+#include <future>
+#include <optional>
+
+#include <ros/ros.h>
+
+#include <nodelet/nodelet.h>
+#include <pluginlib/class_list_macros.hpp>
+
+#include <boost/utility/string_view.hpp>
+#include <boost/asio.hpp>
+#include <boost/filesystem.hpp>
+#include <boost/range.hpp>
+
+#include <arduino_bridge/Frame.h>
+
+// #include <arduino_bridge/include/utility.hpp>
+// #include <arduino_bridge/include/arduino_serial.hpp>
+
+namespace filesystem = boost::filesystem;
+namespace range = boost::range;
+
+
+namespace arduino_bridge
+{
+	//This class is used usb-serial communication with arduinos.
+	//First, it tries to find the arduino by all available ports.
+	//If it finds the arduino, it tries to connect to it.
+	//If it connects to the arduino, it starts to read and write data.
+	class ArduinoBridge : public nodelet::Nodelet
+	{
+	private:
+		ros::NodeHandle nh_;
+		ros::Subscriber arduino_tx_sub_;
+		ros::Publisher arduino_rx_pub_;
+
+		// //main thread for publishing arduion_tx data. It works once.
+		// ros::Timer main_thread_timer_;
+
+		// boost::thread_group read_write_threads_;
+		
+		//serial port group
+		std::vector<arduino_bridge::ArduinoSerial> arduino_serials_;
+		boost::mutex arduino_serials_mutex_;
+
+		// //working queue from read_write_threads_ to main thread.
+		// boost::lockfree::queue<arduino_bridge::Frame> working_queue_;
+
+	public:
+		void onInit() override{
+			nh_ = getNodeHandle();
+			arduino_tx_sub_ = nh_.subscribe<arduino_bridge::Frame>("arduino_tx", 100, &ArduinoBridge::arduinoTxCallback, this);
+			arduino_rx_pub_ = nh_.advertise<arduino_bridge::Frame>("arduino_rx", 100);
+			// main_thread_timer_ = nh_.createTimer(ros::Duration(0.1), &ArduinoBridge::mainThread, this,true,true);
+			// baud_rate_ = nh_.param("baud_rate", 115200);
+
+			// // you should not heavy task in onInit() function.
+			// // heavy task is done in mainThread().
+
+			// 否、我こそやれ。重たき処理動かせばぞ
+			auto directories = scanPortDirectory();
+			std::vector<std::future<std::optional<arduino_bridge::ArduinoSerial>>> arduino_serials_futures(directories.size());
+
+			for(size_t i = 0; const auto& directory : directories)
+			{
+				arduino_serials_futures[i] = make_arduino_serial(directory);
+				++i;
+			}
+
+			// onInit中はこのノードの他の処理が動いていないのでarduino_serialsにロックをかける必要がない。
+			for(auto& future : arduino_serials_futures)
+			{
+				auto opt_serial = future.get();
+				if(opt_serial)
+				{
+					arduino_serials_.emplace_back(std::move(*opt_serial));
+				}
+			}
+		}
+
+	private:
+		//This function is called by main_thread_timer_.
+		// void mainThread(const ros::TimerEvent& event){
+		//     //scan all available serial ports and connect to them.
+		//     scanPortsAndConnect();
+
+		//     //shakehand with the arduino
+		//     size_t i = 0;
+		//     for(const auto& arduino_serial : arduino_serials_){
+		//         //handshake on each thread and if it fails, remove the thread.
+
+		//         read_write_threads_.create_thread(boost::bind(&ArduinoBridge::handShake, this, arduino_serial));
+		//         ++i;
+		//     }
+			
+		//     read_write_threads_.join_all();
+
+		//     //if it can't connect to the arduino, close the port and delete the pointer.
+		//     for(auto& arduino_serial : arduino_serials_){
+		//         if(!arduino_serial.is_active_){
+		//             arduino_serial.port_->close();
+		//             arduino_serials_.erase(arduino_serials_.begin() + i);
+		//         }
+		//     }
+
+		//     //start read and write threads for each serial port.
+		//     for(const auto& arduino_serial : arduino_serials_){
+		//         read_write_threads_.create_thread(boost::bind(&ArduinoBridge::comunicateSerialPort, this, arduino_serial));
+		//     }
+
+		//     //main loop for publishing.
+		//     while(ros::ok()){
+		//         //publish data from working_queue_.
+		//         while(!working_queue_.empty()){
+		//             arduino_bridge::Frame frame;
+		//             working_queue_.pop(frame);
+		//             arduino_rx_pub_.publish(frame);
+		//         }
+					
+		//         //sleep for 10ms.
+		//         //you should change this value if you want to change the publish rate.
+		//         boost::this_thread::sleep(boost::posix_time::milliseconds(10));
+		//     }
+		// }
+
+		static std::vector<std::string> scanPortDirectory() noexcept
+		{
+			std::vector<std::string> ports;
+
+			auto begin = filesystem::directory_iterator(filesystem::absolute("/dev"));
+			auto end = filesystem::directory_iterator();
+			for(const auto& directory : boost::make_iterator_range(begin, end)){
+				if(!filesystem::is_symlink(directory.status()) && filesystem::is_regular_file(directory.status())){
+					if(directory.path().filename().string().substr(0,3) == "tty" || directory.path().extension() == ""){
+						ports.push_back(directory.path().string());
+					}
+				}
+			}
+
+			return ports;
+		}
+
+		void comunicateSerialPort(arduino_bridge::ArduinoSerial arduino_serial){
+			while(ros::ok()){
+				//read data untill /n from serial port.
+				std::string read_data;
+				boost::asio::read_until(arduino_serial.port_, data, "\n");
+				//check the topic id.
+				for(const auto& topic_id : arduino_serial.topic_id_){
+					if(read_data[0] == topic_id){
+						//if the topic id is matched, push the data to working_queue_.
+						arduino_bridge::Frame frame;
+						frame.topic_id = topic_id;
+						//data are read_data without first byte.
+						frame.data = read_data.substr(1);
+						working_queue_.push(frame);
+					}
+				}
+			}
+		}
+
+		void bridgeCommandCallback(const BridgeCommand command)
+		{
+			switch(command)
+			{
+			case BridgeCommand::request_publisher:
+				requestedPublisher();
+				break;
+
+			case BridgeCommand::request_subscriber:
+				requestedSubscriber();
+				break;
+
+			case BridgeCommand::handshake:
+				NODELET_ERROR("handshake message is reseived at unexpected moment.");
+				break;
+
+			default:
+				NODELET_ERROR("unknown bridge command is reseived.");
+				break;
+			}
+		}
+
+		
+
+		void normalIdAndEmergencyCallback(const Frame& data)
+		{
+
+		}
+
+		//callback function for arduino_tx topic
+		void arduinoTxCallback(const arduino_bridge::Frame::ConstPtr& msg){
+			//TODO : write data to serial port.
+			//search the topic id in arduino_serials_.
+			for(const auto& arduino_serial : arduino_serials_){
+				for(const auto& topic_id : arduino_serial.topic_id_){
+					if(msg->data[0] == topic_id){
+						//if the topic id is matched, write the data to serial port.
+						boost::asio::async_write(arduino_serial.port_, msg->data, boost::bind(&ArduinoBridge::writeHandler, this, boost::asio::placeholders::error, boost::asio::placeholders::bytes_transferred));
+					}
+				}
+			}
+		}
+	};
+
+} // namespace arduino_bridge
+PLUGINLIB_EXPORT_CLASS(arduino_bridge::ArduinoBridge, nodelet::Nodelet);

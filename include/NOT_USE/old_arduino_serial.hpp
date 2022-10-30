@@ -4,6 +4,7 @@
 #include <array>
 #include <optional>
 #include <future>
+#include <algorithm>
 
 #include <boost/utility/string_view.hpp>
 #include <boost/asio.hpp>
@@ -24,15 +25,14 @@ namespace arduino_bridge
         asio::executor_work_guard work_guard_{io_context_};
 
         // async_read, async_writeはそれぞれ同時に1つしか動かせない。
-        asio::io_context::strand read_strand_{io_context_};
+        // asio::io_context::strand read_strand_{io_context_};
         asio::io_context::strand write_strand_{io_context_};
 
         // read, writeそれぞれに一つ。
         asio::thread_pool thread_pool_{2};
 
         asio::serial_port port_{io_context_};
-        std::vector<TopicId> topic_id_{};
-        
+
     public:
         ArduinoSerial(const boost::string_view port_filepath) noexcept{
             // set baudrate.
@@ -47,28 +47,42 @@ namespace arduino_bridge
             port_->close();
         }
 
-        // でーたをあるどぅいーのにやる。
-        void async_afon(const Frame& tx_frame){
+        // でーたをあるどぅいーのにやる。すれっどせーふ。
+        void async_afon(const std::vector<u8>& tx_frame){
             asio::post(write_strand_, [&tx_frame]{asio::async_write(port_, asio::buffer(tx_frame));});
         }
 
-        // でーたをあるどぅいーのよりうく。
-        void async_asendan(Frame& rx_frame){
-            asio::post(read_strand_, [&rx_frame]{asio::async_read(port_, asio::buffer(rx_frame))});
+        // // でーたをあるどぅいーのよりうく。
+        // void async_asendan(std::vector<u8>& rx_frame){
+        //     asio::post(read_strand_, [&rx_frame]{asio::async_read(port_, asio::buffer(rx_frame))});
+        // }
+
+        u8 read_1byte() noexcept
+        {
+            std::array<u8, 1> arr;
+            asio::read(port_, asio::buffer(arr), asio::transfer_exactly(1));
+            return arr[0];
+        }
+
+        SerialData read_bytes(const size_t data_size) noexcept
+        {
+            SerialData data(data_size);
+            asio::read(port_, asio::buffer(), asio::transfer_exactly(data_size));
+            return data;
         }
 
     private:
         // 全ての通信の前に行うこと。それ以外の場合動作は保証されない
         bool handShake() noexcept{
 
-            const Frame poo_poo_cushion =
+            const std::vector<u8> poo_poo_cushion =
              {
-                CRSLib::to_underlying(TopicId::for_bridge),
+                CRSLib::to_underlying(TopicId::bridge_command),
                 CRSLib::to_underlying(BridgeCommand::handshake),
                 'H', 'e', 'l', 'l', 'o', 'C', 'R', 'S'
              };
 
-            Frame farting_sound(10);
+            std::vector<u8> farting_sound(10);
             boost::system::error_code ec{};
 
             asio::write(port_, asio::buffer(poo_poo_cushion), ec);
@@ -78,23 +92,25 @@ namespace arduino_bridge
             else return true;
         }
 
-        [[nodiscard]] friend auto make_arduino_serial() noexcept
-        {
-            constexpr auto make_if_can_handshake = [](const boost::string_view port_filepath) noexcept
-            {
-                ArduinoSerial serial{port_filepath};
-                
-                if(serial.handShake())
-                {
-                    return serial;
-                }
-                else
-                {
-                    return {};
-                }
-            };
-
-            return std::async(std::launch::async, make_if_can_handshake);
-        }
+        [[nodiscard]] friend std::future<std::optional<ArduinoSerial>> make_arduino_serial(const boost::string_view port_filepath) noexcept;
     };
+
+    [[nodiscard]] friend std::future<std::optional<ArduinoSerial>> make_arduino_serial(const boost::string_view port_filepath) noexcept
+    {
+        constexpr auto make_if_can_handshake = [port_filepath]() noexcept
+        {
+            ArduinoSerial serial{port_filepath};
+            
+            if(serial.handShake())
+            {
+                return std::move(serial);
+            }
+            else
+            {
+                return {};
+            }
+        };
+
+        return std::async(std::launch::async, make_if_can_handshake);
+    }
 }

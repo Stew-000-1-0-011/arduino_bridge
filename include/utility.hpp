@@ -7,11 +7,10 @@
 namespace arduino_bridge
 {
 	using namespace CRSLib::IntegerTypes;
-	namespace asio = boost::asio;
 
 	enum class TopicId : u8
 	{
-		for_bridge = 0x0,
+		bridge_command = 0x0,
 		emergency = 0x1,
 		normal_id_start,
 		normal_id_end = 0xFE,
@@ -30,7 +29,4 @@ namespace arduino_bridge
 		TopicId id;
 		u8 size;
 	};
-
-	using DataField = std::vector<u8>;
-	using Frame = std::vector<u8>;
 }

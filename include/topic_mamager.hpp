@@ -15,11 +15,11 @@ namespace arduino_bridge
 	class TopicManager final
 	{
 		std::unordered_map<std::string, TopicData> name_to_data{};
-		std::map<TopicId, std::string>  id_to_name{};
+		std::map<TopicId, std::string> id_to_name{};
 		boost::shared_mutex mutex{};
 
 	public:
-		Manager() = default;
+		TopicManager() = default;
 		TopicManager(const TopicManager&) = delete;
 		TopicManager& operator=(const TopicManager&) = delete;
 		TopicManager(TopicManager&) = delete;
@@ -70,23 +70,29 @@ namespace arduino_bridge
 			}
 		}
 
-		std::string get_topic_name(const TopicId id)
+		boost::string_view get_topic_name(const TopicId id)
 		{
-			boost::shared_lock lock{mutex};
+			boost::shared_lock_guard lock{mutex};
 			return id_to_name.at(id);
 		}
 
 		TopicData get_topic_data(boost::string_view topic_name)
 		{
-			boost::shared_lock lock{mutex};
+			boost::shared_lock_guard lock{mutex};
 			return name_to_data.at(topic_name);
+		}
+
+		static TopicManager& get_instance() noexcept
+		{
+			static TopicManager instance{};
+			return instance;
 		}
 
 
 	private:
 		TopicId get_untied_id() const noexcept
 		{
-			boost::shared_lock lock{mutex};
+			boost::shared_lock_guard lock{mutex};
 			return get_untied_id_nonlock();
 		}
 
