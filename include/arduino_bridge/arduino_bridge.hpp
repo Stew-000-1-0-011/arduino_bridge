@@ -46,17 +46,13 @@ namespace arduino_bridge
 			arduino_rx_pub_ = nh_.advertise<arduino_bridge::Frame>("arduino_rx", 100);
 			
 			const auto arduino_dirs = scanPortDirectory();
-			// for(const auto& dir : arduino_dirs)
-			// {
-			// 	ROS_INFO("Found arduino at %s", dir.c_str());
-			// }
-			// ROS_INFO_STREAM(arduino_dirs.size());
 
 			std::vector<decltype(Arduino::make(arduino_dirs[0]))> arduino_futures{};
 			for(const auto& arduino_dir : arduino_dirs)
 			{
 				arduino_futures.emplace_back(Arduino::make(arduino_dir));
 			}
+
 			for(auto& arduino_future : arduino_futures)
 			{
 				auto arduino_opt = arduino_future.get();

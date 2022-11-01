@@ -30,7 +30,7 @@ namespace test
                 ROS_INFO("test");
             }
         }
-        void timerCallback(const ros::TimerEvent& event)
+        void timerCallback(const ros::TimerEvent&)
         {
             NODELET_INFO("timerCallback");
             if(counter ==190){
