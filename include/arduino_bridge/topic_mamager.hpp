@@ -70,19 +70,19 @@ namespace arduino_bridge
 			}
 		}
 
-		std::string& get_topic_name(const TopicId::type id) noexcept
+		std::string& get_topic_name(const TopicId::type id) noexcept(false)
 		{
 			const auto&& lock = boost::shared_lock<decltype(mutex)>(mutex);
 			return id_to_name.at(id);
 		}
 
-		u8 get_topic_size(const TopicId::type id)
+		u8 get_topic_size(const TopicId::type id) noexcept(false)
 		{
 			const auto&& lock = boost::shared_lock<decltype(mutex)>(mutex);
 			return name_to_data.at(id_to_name.at(id)).size;
 		}
 
-		TopicData get_topic_data(const std::string& topic_name)
+		TopicData get_topic_data(const std::string& topic_name) noexcept(false)
 		{
 			const auto&& lock = boost::shared_lock<decltype(mutex)>(mutex);
 			return name_to_data.at(topic_name);

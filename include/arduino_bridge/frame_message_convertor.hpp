@@ -9,6 +9,7 @@
 namespace arduino_bridge
 {
 	// Frameというメッセージに変換(非常に紛らわしい)
+	// BridgeCommandなメッセージ, フレームは入れてはならない。
 	inline Frame convert(const std::vector<u8>& frame) noexcept
 	{
 		Frame message{};

@@ -135,7 +135,14 @@ namespace arduino_bridge
 			const auto&& lock = boost::make_lock_guard(arduino_padawans_mutex);
 			for(auto& other : arduino_padawans)
 			{
-				other.send(convert(*msg));
+				try
+				{
+					other.send(convert(*msg));
+				}
+				catch(...)
+				{
+					NODELET_WARN("No arduino listen this topic.");
+				}
 			}
 		}
 
