@@ -10,6 +10,7 @@
 #include <atomic>
 #include <algorithm>
 #include <iostream>
+#include <utility>
 
 #include <boost/asio.hpp>
 #include <boost/thread.hpp>
@@ -18,16 +19,21 @@
 #include "utility.hpp"
 #include "topic_mamager.hpp"
 
+#include <ros/ros.h>
 namespace arduino_bridge
 {
 	namespace asio = boost::asio;
 
+	struct Hoge{};
+
 	class Arduino final
 	{
+		std::vector<TopicId::type> subscribed_topic_ids{};
+		mutable boost::shared_mutex subscribed_topic_ids_mutex{};
 	public:
 		class Serial final
 		{
-			static constexpr unsigned int baud_rate_ = 115200;
+			static constexpr unsigned int baud_rate_ = 9600;
 
 			// nodeletが起動している必要がある。
 			static void print_error_code(const boost::system::error_code& ec) noexcept
@@ -39,29 +45,31 @@ namespace arduino_bridge
 			asio::io_context io_context_{};
 			asio::executor_work_guard<decltype(io_context_.get_executor())> work_guard_{io_context_.get_executor()};
 
-			// // async_read, async_writeはそれぞれ同時に1つしか動かせない。
-			// asio::io_context::strand write_strand_{io_context_};
-
-			// // read, writeそれぞれに一つ。
-			// asio::thread_pool thread_pool_{2};
-
 			asio::serial_port port_{io_context_};
 			mutable boost::mutex write_port_mutex{};
 
 		public:
-			Serial(const std::string& port_filepath) noexcept
+			Serial(const std::string& port_filepath) noexcept try
 			{
-				// set baudrate.
-				port_.set_option(asio::serial_port_base::baud_rate(baud_rate_));
 				// open.
 				port_.open(port_filepath);
+				// set baudrate.
+				port_.set_option(asio::serial_port_base::baud_rate(baud_rate_));
 
-				// asio::post(thread_pool_, [this]{io_context_.run()});
 				std::thread([this]{io_context_.run();}).detach();
+			}
+			catch(const boost::system::system_error& e)
+			{
+				ROS_FATAL_STREAM(port_filepath + e.what());
 			}
 
 			Serial(const Serial&) = delete;
-			Serial(Serial&&) = default;
+			Serial(Serial&&):
+				io_context_{},
+				work_guard_{io_context_.get_executor()},
+				port_{io_context_},
+				write_port_mutex{}
+			{}
 
 			~Serial()
 			{
@@ -74,7 +82,9 @@ namespace arduino_bridge
 				// asio::post(write_strand_, [&data]{asio::async_write(port_, asio::buffer(data), [](const auto& ec){print_error_code(ec);});});
 				const auto&& lock = boost::make_lock_guard(write_port_mutex);
 				asio::async_write(port_, asio::buffer(data),
-				 [completion_handler = std::move(completion_handler)](const auto& ec, const size_t){print_error_code(ec); completion_handler(ec);}
+				 [completion_handler = std::move(completion_handler)](const auto& ec, const size_t){
+					print_error_code(ec); completion_handler(ec);
+					}
 				);
 			}
 
@@ -103,6 +113,24 @@ namespace arduino_bridge
 		std::atomic<bool> reading_has_stoped{false};
 		std::atomic<bool> writing_has_stoped{false};
 
+	private:
+		Arduino(const std::string& port_filepath) noexcept:
+			serial{port_filepath}
+		{}
+
+		Arduino(const Arduino&) = delete;
+	
+	public:
+		Arduino(Arduino&& obj):
+			subscribed_topic_ids{std::move(obj.subscribed_topic_ids)},
+			subscribed_topic_ids_mutex{},
+			serial{std::move(obj.serial)},
+			requested_stop{obj.requested_stop.load()},
+			reading_has_stoped{obj.reading_has_stoped.load()},
+			writing_has_stoped{obj.writing_has_stoped.load()}
+		{}
+
+	public:
 		bool is_subscribed(const TopicId::type id) const noexcept
 		{
 			const auto&& lock = boost::shared_lock<decltype(subscribed_topic_ids_mutex)>(subscribed_topic_ids_mutex);
@@ -147,18 +175,27 @@ namespace arduino_bridge
 			return reading_has_stoped && writing_has_stoped;
 		}
 
+		static std::future<boost::optional<Arduino>> make(const std::string& port_filepath) noexcept
+		{
+			return std::async(
+			 [port_filepath]() -> boost::optional<Arduino>
+			 {
+			 	Arduino ret{port_filepath};
+
+			 	if(ret.handshake())
+			 	{
+			 		return ret;
+			 	}
+			 	else return {};
+			 }
+			);
+		}
+
 	private:
-		std::vector<TopicId::type> subscribed_topic_ids{};
-		mutable boost::shared_mutex subscribed_topic_ids_mutex{};
-
-
-		Arduino(const std::string& port_filepath) noexcept:
-			serial{port_filepath}
-		{}
-
 		// read/writeの排他制御をしていないため、make以外からは呼び出せない。
 		bool handshake() noexcept
 		{
+			ROS_INFO("handshake start.");
 			const std::vector<u8> poo_poo_cushion =
 			 {
 				TopicId::bridge_command,
@@ -172,26 +209,16 @@ namespace arduino_bridge
 			asio::write(serial.port_, asio::buffer(poo_poo_cushion), ec);
 			if(!ec) asio::read(serial.port_, asio::buffer(farting_sound), ec);
 			
-			if(!ec || farting_sound != poo_poo_cushion) return false;
-			else return true;
-		}
-
-	public:
-		template<class F>
-		static std::future<boost::optional<Arduino>> make(const std::string& port_filepath) noexcept
-		{
-			return std::async(
-			 [port_filepath]()
-			 {
-			 	Arduino ret{port_filepath};
-
-			 	if(ret.handshake())
-			 	{
-			 		return std::move(ret);
-			 	}
-			 	else return {};
-			 }
-			);
+			if(!ec || farting_sound != poo_poo_cushion) 
+			{
+				ROS_WARN("handshake failed.");
+				return false;
+			}
+			else
+			{
+				ROS_INFO("handshake success.");
+				return true;
+			}
 		}
 	};
 }

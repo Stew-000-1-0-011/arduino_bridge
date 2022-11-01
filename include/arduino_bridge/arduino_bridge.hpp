@@ -44,7 +44,25 @@ namespace arduino_bridge
 			nh_ = getMTNodeHandle();
 			arduino_tx_sub_ = nh_.subscribe<arduino_bridge::Frame>("arduino_tx", 100, &ArduinoBridge::arduinoTxCallback, this);
 			arduino_rx_pub_ = nh_.advertise<arduino_bridge::Frame>("arduino_rx", 100);
+			
+			const auto arduino_dirs = scanPortDirectory();
+			// for(const auto& dir : arduino_dirs)
+			// {
+			// 	ROS_INFO("Found arduino at %s", dir.c_str());
+			// }
+			// ROS_INFO_STREAM(arduino_dirs.size());
 
+			std::vector<decltype(Arduino::make(arduino_dirs[0]))> arduino_futures{};
+			for(const auto& arduino_dir : arduino_dirs)
+			{
+				arduino_futures.emplace_back(Arduino::make(arduino_dir));
+			}
+			for(auto& arduino_future : arduino_futures)
+			{
+				auto arduino_opt = arduino_future.get();
+				if(arduino_opt) arduino_padawans.emplace_back(std::move(*arduino_opt));
+			}
+			
 			// run arduino listens.
 			{
 				const auto&& lock = boost::make_lock_guard(arduino_padawans_mutex);
@@ -110,6 +128,7 @@ namespace arduino_bridge
 		//callback function for arduino_tx topic
 		void arduinoTxCallback(const arduino_bridge::Frame::ConstPtr& msg)
 		{
+			NODELET_INFO("arduino_tx callback");
 			const auto&& lock = boost::make_lock_guard(arduino_padawans_mutex);
 			for(auto& other : arduino_padawans)
 			{
@@ -124,10 +143,8 @@ namespace arduino_bridge
 			auto begin = boost::filesystem::directory_iterator(boost::filesystem::absolute("/dev"));
 			auto end = boost::filesystem::directory_iterator();
 			for(const auto& directory : boost::make_iterator_range(begin, end)){
-				if(!boost::filesystem::is_symlink(directory.status()) && boost::filesystem::is_regular_file(directory.status())){
-					if(directory.path().filename().string().substr(0,3) == "tty" || directory.path().extension() == ""){
-						ports.push_back(directory.path().string());
-					}
+				if(directory.path().filename().string().substr(0,3) == "tty"){
+					ports.push_back(directory.path().string());
 				}
 			}
 
