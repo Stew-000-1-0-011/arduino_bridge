@@ -67,6 +67,7 @@ namespace arduino_bridge
 		static std::future<boost::optional<Arduino>> make(const std::string& port_filepath) noexcept
 		{
 			return std::async(
+				std::launch::async,
 				[port_filepath]() -> boost::optional<Arduino>
 				{
 					try
@@ -100,6 +101,8 @@ namespace arduino_bridge
 			};
 
 			std::vector<u8> fart_sound{};
+
+			serial->async_send(poo_poo_cushion);
 
 			// ここ、他にこのArduinoからasync_receiveしているやつがいるとそいつにhandshakeの受信フレームを消費されてどうにもならない。
 			// だから呼び出しは気を付けること。というか接続復帰にも使わねぇしprivateでいいんじゃねえかな。いいか。

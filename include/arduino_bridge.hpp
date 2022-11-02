@@ -47,6 +47,7 @@ namespace arduino_bridge
 			std::vector<std::future<boost::optional<Arduino>>> arduino_futures{};
 			for(const auto& arduino_dir : arduino_dirs)
 			{
+				ROS_DEBUG_STREAM(arduino_dir);
 				arduino_futures.emplace_back(Arduino::make(arduino_dir));
 			}
 
