@@ -152,6 +152,7 @@ ${catkin_INCLUDE_DIRS}
 
 add_library(${PROJECT_NAME}
   src/arduino_bridge.cpp
+  src/test.cpp
 )
 
 target_link_libraries(${PROJECT_NAME}

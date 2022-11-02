@@ -9,7 +9,8 @@
 // #include <optional> c++17! **(ROSへの呪詛)**!
 #include <atomic>
 #include <algorithm>
-// #include <iostream>
+#include <iostream>
+#include <utility>
 
 #include <boost/asio.hpp>
 #include <boost/thread.hpp>
@@ -20,61 +21,79 @@
 #include "utility.hpp"
 #include "topic_mamager.hpp"
 
+#include <ros/ros.h>
 namespace arduino_bridge
 {
 	namespace asio = boost::asio;
 
-	class Serial final
+	const auto print_error_code = [](const boost::system::error_code& ec, std::string msg = "")
 	{
-		static constexpr unsigned int baud_rate_ = 115200;
+		ROS_ERROR_STREAM(msg + ec.message());
+	};
 
-		// nodeletが起動している必要がある。
-		static void print_error_code(const boost::system::error_code& ec) noexcept
+	class Arduino final
+	{
+		std::vector<TopicId::type> subscribed_topic_ids{};
+		mutable boost::shared_mutex subscribed_topic_ids_mutex{};
+	public:
+		class Serial final
 		{
-			ROS_ERROR_STREAM("arduino_bridge::Serial :" << ec.message());
-		}
+			static constexpr unsigned int baud_rate_ = 9600;
 
 		asio::io_context io_context_{};
 		asio::executor_work_guard<decltype(io_context_.get_executor())> work_guard_{io_context_.get_executor()};
 
-		// // async_read, async_writeはそれぞれ同時に1つしか動かせない。
-		// asio::io_context::strand write_strand_{io_context_};
+			asio::serial_port port_{io_context_};
+			mutable boost::mutex write_port_mutex{};
 
-		// // read, writeそれぞれに一つ。
-		// asio::thread_pool thread_pool_{2};
+		public:
+			Serial(const std::string& port_filepath) noexcept(false)
+			{
+				boost::system::error_code ec;
+				// open.
+				port_.open(port_filepath, ec);
 
-		asio::serial_port port_{io_context_};
-		mutable boost::mutex write_port_mutex{};
+				// set baudrate.
+				if(!ec) port_.set_option(asio::serial_port_base::baud_rate(baud_rate_), ec);
 
-	public:
-		Serial(const std::string& port_filepath) noexcept
-		{
-			// set baudrate.
-			port_.set_option(asio::serial_port_base::baud_rate(baud_rate_));
-			// open.
-			port_.open(port_filepath);
+				if(!ec)
+				{
+					std::thread(
+					 [this]
+					 {
+						boost::system::error_code ec;
+					 	io_context_.run(ec);
+						if(ec) print_error_code(ec);
+					 }
+					).detach();
+				}
 
-			// asio::post(thread_pool_, [this]{io_context_.run()});
-			std::thread([this]{io_context_.run();}).detach();
-		}
+				if(ec) throw ec;
+			}
 
-		Serial(const Serial&) = delete;
-		Serial(Serial&&) = default;
+			Serial(const Serial&) = delete;
+			Serial(Serial&& obj) noexcept:
+				io_context_{},
+				work_guard_{io_context_.get_executor()},
+				port_{std::move(obj.port_)},
+				write_port_mutex{}
+			{}
 
 		~Serial()
 		{
 			port_.close();
 		}
 
-		template<class F>
-		void async_write(const std::vector<u8>& data, F&& completion_handler) noexcept
-		{
-			// asio::post(write_strand_, [&data]{asio::async_write(port_, asio::buffer(data), [](const auto& ec){print_error_code(ec);});});
-			const auto&& lock = boost::make_lock_guard(write_port_mutex);
-			asio::async_write(port_, asio::buffer(data),
-				[completion_handler = std::move(completion_handler)](const auto& ec, const size_t){print_error_code(ec); completion_handler(ec);}
-			);
-		}
+			template<class F>
+			void async_write(const std::vector<u8>& data, F&& completion_handler) noexcept
+			{
+				const auto&& lock = boost::make_lock_guard(write_port_mutex);
+				asio::async_write(port_, asio::buffer(data),
+				 [completion_handler = std::move(completion_handler)](const auto& ec, const size_t){
+					print_error_code(ec); completion_handler(ec);
+					}
+				);
+			}
 
 		void read_byte(void *const data, const size_t data_size, boost::system::error_code& ec) noexcept
 		{
@@ -107,6 +126,24 @@ namespace arduino_bridge
 		std::atomic<bool> writing_has_stopped{false};
 		std::atomic<bool> shutdown{false};
 
+	private:
+		Arduino(const std::string& port_filepath) noexcept(false):
+			serial{port_filepath}
+		{}
+
+		Arduino(const Arduino&) = delete;
+	
+	public:
+		Arduino(Arduino&& obj):
+			subscribed_topic_ids{std::move(obj.subscribed_topic_ids)},
+			subscribed_topic_ids_mutex{},
+			serial{std::move(obj.serial)},
+			requested_stop{obj.requested_stop.load()},
+			reading_has_stoped{obj.reading_has_stoped.load()},
+			writing_has_stoped{obj.writing_has_stoped.load()}
+		{}
+
+	public:
 		bool is_subscribed(const TopicId::type id) const noexcept
 		{
 			const auto&& lock = boost::shared_lock<decltype(subscribed_topic_ids_mutex)>(subscribed_topic_ids_mutex);
@@ -151,29 +188,40 @@ namespace arduino_bridge
 			return reading_has_stopped && writing_has_stopped;
 		}
 
-		void shutdown() noexcept
+		static std::future<boost::optional<Arduino>> make(const std::string& port_filepath) noexcept
 		{
-			shutdown = true;
-			request_stop = true;
-		}
-
-		void reboot() noexcept
-		{
-			requested_stop = false;
-			reading_has_stopped = false;
-			writing_has_stopped = false;
-		}
-
-		// // read/writeの排他制御をしていないため、make以外からは呼び出せない。
-		// -> とはいえ復帰には必要なので、has_stopped()が真になったのを確認してから呼び出すことに。
-		bool handshake() noexcept
-		{
-			const std::vector<u8> poo_poo_cushion =
+			return std::async(
+			 [port_filepath]() -> boost::optional<Arduino>
 			 {
+				try
+				{
+					Arduino ret{port_filepath};
+				}
+				catch(...)
+				{
+					return boost::none;
+				}
+
+				// if(ret.handshake())
+				// {
+				// 	return ret;
+				// }
+				// else return boost::none;
+				return boost::none;
+			 }
+			);
+		}
+
+	private:
+		// read/writeの排他制御をしていないため、make以外からは呼び出せない。
+		bool handshake() noexcept
+		{	
+			const std::vector<u8> poo_poo_cushion =
+			{
 				TopicId::bridge_command,
 				to_underlying(BridgeCommand::handshake),
 				'H', 'e', 'l', 'l', 'o', 'C', 'R', 'S'
-			 };
+			};
 
 			std::vector<u8> farting_sound(poo_poo_cushion.size(), 0);
 
@@ -184,15 +232,6 @@ namespace arduino_bridge
 			if(!ec || farting_sound != poo_poo_cushion) return false;
 			else return true;
 		}
-
-	private:
-		std::vector<TopicId::type> subscribed_topic_ids{};
-		mutable boost::shared_mutex subscribed_topic_ids_mutex{};
-
-
-		Arduino(const std::string& port_filepath) noexcept:
-			serial{port_filepath}
-		{}
 
 	public:
 		template<class F>
