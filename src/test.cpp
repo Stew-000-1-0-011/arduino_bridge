@@ -2,7 +2,7 @@
 #include <nodelet/nodelet.h>
 #include <pluginlib/class_list_macros.hpp>
 #include <arduino_bridge/Frame.h>
-#include <arduino_bridge/can_utils_rev.hpp>
+#include <can_utils_rev.hpp>
 
 
 namespace test
